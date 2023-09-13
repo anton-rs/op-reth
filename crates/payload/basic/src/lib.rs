@@ -341,6 +341,17 @@ where
             return Poll::Ready(Ok(()))
         }
 
+        // If compute pending block is disabled, we return early
+        // since the payload attributes contain the sequencer transactions
+        // that are used to build the block. So, in the future resolution
+        // the payload can be built synchronously.
+        // Also, compute pending block is used to prevent pending transactions
+        // from showing up in the pending block, which leaks the tx pool.
+        #[cfg(feature = "optimism")]
+        if !this.config.compute_pending_block {
+            return Poll::Ready(Ok(()))
+        }
+
         // check if the interval is reached
         while this.interval.poll_tick(cx).is_ready() {
             // start a new job if there is no pending block and we haven't reached the deadline
@@ -444,6 +455,30 @@ where
         let maybe_better = self.pending_block.take();
         let mut empty_payload = None;
 
+        // If compute pending block is disabled or there is no tx pool,
+        // the best payload has to be built on future resolve.
+        #[cfg(feature = "optimism")]
+        if !self.config.compute_pending_block || self.config.attributes.no_tx_pool {
+            let args = BuildArguments {
+                client: self.client.clone(),
+                pool: self.pool.clone(),
+                cached_reads: self.cached_reads.take().unwrap_or_default(),
+                config: self.config.clone(),
+                cancel: Cancelled::default(),
+                best_payload: None,
+            };
+            if let Ok(BuildOutcome::Better { payload, cached_reads }) = self.builder.try_build(args)
+            {
+                self.cached_reads = Some(cached_reads);
+                trace!("[OPTIMISM] Forced best payload");
+                let payload = Arc::new(payload);
+                return (
+                    ResolveBestPayload { best_payload: Some(payload), maybe_better, empty_payload },
+                    KeepPayloadJobAlive::Yes,
+                )
+            }
+        }
+
         if best_payload.is_none() {
             // if no payload has been built yet
             self.metrics.inc_requested_empty_payload();
@@ -455,33 +490,6 @@ where
                 let res = build_empty_payload(&client, config);
                 let _ = tx.send(res);
             }));
-
-            #[cfg(feature = "optimism")]
-            if self.config.chain_spec.optimism && self.config.attributes.no_tx_pool {
-                let args = BuildArguments {
-                    client: self.client.clone(),
-                    pool: self.pool.clone(),
-                    cached_reads: self.cached_reads.take().unwrap_or_default(),
-                    config: self.config.clone(),
-                    cancel: Cancelled::default(),
-                    best_payload: None,
-                };
-                if let Ok(BuildOutcome::Better { payload, cached_reads }) =
-                    self.builder.try_build(args)
-                {
-                    self.cached_reads = Some(cached_reads);
-                    trace!("[OPTIMISM] Forced best payload");
-                    let payload = Arc::new(payload);
-                    return (
-                        ResolveBestPayload {
-                            best_payload: Some(payload),
-                            maybe_better,
-                            empty_payload,
-                        },
-                        KeepPayloadJobAlive::Yes,
-                    )
-                }
-            }
 
             empty_payload = Some(rx);
         }
@@ -598,9 +606,7 @@ struct PayloadConfig {
     /// The chain spec.
     chain_spec: Arc<ChainSpec>,
     /// The rollup's compute pending block configuration option.
-    /// TODO(clabby): Implement this feature.
     #[cfg(feature = "optimism")]
-    #[allow(dead_code)]
     compute_pending_block: bool,
 }
 
