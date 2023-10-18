@@ -35,9 +35,13 @@ anyhow = "1.0"
 thiserror.workspace = true
 hex = "*"
 
+# Linux async IO interface.
+io-uring = { version = "0.6", optional = true }
+
 [dev-dependencies]
 rand = { version = "0.8", features = ["small_rng"] }
 
 
 [features]
 default = []
+io_uring = ["dep:io-uring"]

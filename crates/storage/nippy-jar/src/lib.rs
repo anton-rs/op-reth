@@ -104,6 +104,11 @@ pub struct NippyJar<H = ()> {
     /// Data path for file. Index file will be `{path}.idx`
     #[serde(skip)]
     path: Option<PathBuf>,
+    /// [tokio::io_uring] ring buffer handle for async I/O on Linux systems.
+    /// Restricted to kernel versions >= 5.6.
+    #[cfg(and(target_os = "linux", feature = "io_uring"))]
+    #[serde(skip)]
+    ring: tokio::io_uring::IoUring,
 }
 
 impl<H: std::fmt::Debug> std::fmt::Debug for NippyJar<H> {
@@ -159,6 +164,7 @@ where
             offsets: EliasFano::default(),
             offsets_index: PrefixSummedEliasFano::default(),
             path: Some(path.to_path_buf()),
+            ring: todo!(),
         }
     }
 
