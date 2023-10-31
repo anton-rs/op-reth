@@ -126,7 +126,7 @@ pub fn calculate_receipt_root_ref(receipts: &[&Receipt]) -> B256 {
 pub fn calculate_ommers_root(ommers: &[Header]) -> B256 {
     // Check if `ommers` list is empty
     if ommers.is_empty() {
-        return EMPTY_OMMER_ROOT_HASH
+        return EMPTY_OMMER_ROOT_HASH;
     }
     // RLP Encode
     let mut ommers_rlp = Vec::new();
@@ -212,7 +212,7 @@ mod tests {
     #[cfg(feature = "optimism")]
     #[test]
     fn check_optimism_receipt_root() {
-        use reth_primitives::{Bloom, Bytes};
+        use crate::{Bloom, Bytes};
 
         let receipts = vec![
             // 0xb0d6ee650637911394396d81172bd1c637d568ed1fbddab0daddfca399c58b53
